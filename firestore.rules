@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function isAdmin() { return signedIn() && me().role == 'admin'; }
+    function isFaculty() { return signedIn() && me().role == 'faculty'; }
+    function staff() { return isAdmin() || isFaculty(); }
+    function manages(c) { return isAdmin() || (isFaculty() && c in me().classIds); }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || staff());
+      allow create: if signedIn() && ((request.auth.uid == uid && request.resource.data.role == 'student') || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+    match /classes/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /faculty/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /students/{id} {
+      allow read: if signedIn() && (request.auth.uid == id || staff());
+      allow create: if signedIn() && request.auth.uid == id;
+      allow update, delete: if isAdmin();
+    }
+    // Class-scoped content: students read their own class; faculty write only for classes they teach
+    match /{col}/{id} {
+      allow read: if signedIn() && col in ['subjects','notes','announcements','assignments','timetable','exams']
+                  && (staff() || resource.data.classId == me().classId);
+      allow create: if col in ['subjects','notes','announcements','assignments','timetable','exams'] && manages(request.resource.data.classId);
+      allow update: if col in ['subjects','notes','announcements','assignments','timetable','exams']
+                    && manages(resource.data.classId) && manages(request.resource.data.classId);
+      allow delete: if col in ['subjects','notes','announcements','assignments','timetable','exams'] && manages(resource.data.classId);
+    }
+    // Per-student records
+    match /{col}/{id} {
+      allow read: if signedIn() && col in ['attendance','marks'] && (staff() || resource.data.studentId == request.auth.uid);
+      allow create: if col in ['attendance','marks'] && manages(request.resource.data.classId);
+      allow update: if col in ['attendance','marks'] && manages(resource.data.classId) && manages(request.resource.data.classId);
+      allow delete: if col in ['attendance','marks'] && manages(resource.data.classId);
+    }
+    match /doubts/{id} {
+      allow read: if signedIn() && (staff() || resource.data.studentId == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.studentId == request.auth.uid
+                    && request.resource.data.classId == me().classId && me().role == 'student';
+      allow update: if signedIn() && (manages(resource.data.classId) ||
+                    (resource.data.studentId == request.auth.uid && request.resource.data.get('answer','') == resource.data.get('answer','')));
+      allow delete: if signedIn() && (manages(resource.data.classId) || resource.data.studentId == request.auth.uid);
+    }
+    match /tasks/{id} {
+      allow read, delete: if signedIn() && resource.data.studentId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.studentId == request.auth.uid;
+      allow update: if signedIn() && resource.data.studentId == request.auth.uid && request.resource.data.studentId == request.auth.uid;
+    }
+  }
+}
