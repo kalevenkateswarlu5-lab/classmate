@@ -1,4 +1,4 @@
-import { auth, db } from '../firebase/config.js';
+import { auth, db } from '../config.js';
 import { requireRole, logout, createFaculty } from './auth.js';
 import { MODULES } from './modules.js';
 import { esc, toast, confirmDialog, friendly } from './ui.js';
