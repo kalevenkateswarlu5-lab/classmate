@@ -1,6 +1,6 @@
 import { login, signupStudent } from './auth.js';
 import { toast, friendly } from './ui.js';
-import { db } from '../firebase/config.js';
+import { db } from '../config.js';
 import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const role = document.body.dataset.role;
